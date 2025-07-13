@@ -1,5 +1,6 @@
 package lv.mintos.demo.DemoApp.service;
 
+import com.github.benmanes.caffeine.cache.Cache;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import lv.mintos.demo.DemoApp.dto.TransactionDTO;
@@ -29,6 +30,7 @@ public class TransactionService {
     private final MainMapper mainMapper;
     private final AccountRepository accountRepository;
     private final List<ExchangeRateService> serviceList;
+    private final Cache<String, BigDecimal> exchangeRateCache;
     private final TransactionRepository transactionRepository;
 
     @Transactional
@@ -40,7 +42,7 @@ public class TransactionService {
             throw new AppLogicException(HttpStatus.BAD_REQUEST, "Source account has low balance");
         }
         srcAccount.setBalance(srcAccount.getBalance().subtract(request.amount()));
-        BigDecimal rate = getExchangeRate(srcAccount, destAccount);
+        BigDecimal rate = getExchangeRate(srcAccount.getCurrency(), destAccount.getCurrency());
         log.info("Rate resolved to be: " + rate);
         destAccount.setBalance(destAccount.getBalance().add(request.amount().multiply(rate)));
         accountRepository.save(srcAccount);
@@ -61,9 +63,20 @@ public class TransactionService {
                 .build());
     }
 
-    private BigDecimal getExchangeRate(Account srcAccount, Account destAccount) {
+    private BigDecimal getExchangeRate(String sourceCurrency, String destinationCurrency) {
+        String key = sourceCurrency + "-" + destinationCurrency;
+        if (exchangeRateCache.getIfPresent(key) != null) {
+            log.info("Getting exchange rate from cache");
+            return exchangeRateCache.getIfPresent(key);
+        }
+        BigDecimal rate = getExchangeRateFromApi(sourceCurrency, destinationCurrency);
+        exchangeRateCache.put(key, rate);
+        return rate;
+    }
+
+    private BigDecimal getExchangeRateFromApi(String sourceCurrency, String destinationCurrency) {
         return serviceList.stream()
-                .map(s -> s.getExchangeRate(srcAccount.getCurrency(), destAccount.getCurrency()))
+                .map(s -> s.getExchangeRate(sourceCurrency, destinationCurrency))
                 .filter(Optional::isPresent)
                 .findFirst()
                 .flatMap(Function.identity())
