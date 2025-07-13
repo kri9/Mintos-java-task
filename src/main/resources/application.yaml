@@ -7,6 +7,6 @@ spring:
 exchanges.apis:
   configs:
     - url: https://api.frankfurter.dev/v1/latest
-      serviceId: frankfurtApi
-    - url: someother
-      serviceId: otherId
+      service-id: frankfurtApi
+    - url: https://v6.exchangerate-api.com/v6/5781c7d319af7a3117f90e80
+      service-id: exchangerateApi
